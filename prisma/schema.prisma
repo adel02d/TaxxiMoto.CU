@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  telegramId     Int      @unique
+  firstName      String
+  lastName       String?
+  username       String?
+  phone          String?
+  role           String   @default("client")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  rides          Ride[]
+  payments       Payment[]
+}
+
+model Driver {
+  id              Int      @id @default(autoincrement())
+  telegramId      Int      @unique
+  firstName       String
+  lastName        String?
+  username        String?
+  phone           String?
+  motorcyclePlate String?
+  motorcycleModel String?
+  status          String   @default("available")
+  rating          Float    @default(5.0)
+  totalRides      Int      @default(0)
+  totalEarnings   Float    @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  rides           Ride[]
+}
+
+model Ride {
+  id             Int       @id @default(autoincrement())
+  clientId       Int
+  clientName     String
+  clientPhone    String?
+  driverId       Int?
+  driverName     String?
+  pickupAddress  String
+  dropoffAddress String?
+  pickupLat      Float?
+  pickupLng      Float?
+  dropoffLat     Float?
+  dropoffLng     Float?
+  fare           Float?
+  distance       Float?
+  status         String    @default("pending")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+  client         User      @relation(fields: [clientId], references: [telegramId])
+  driver         Driver?   @relation(fields: [driverId], references: [telegramId])
+  payment        Payment[]
+}
+
+model Payment {
+  id         Int      @id @default(autoincrement())
+  rideId     Int
+  amount     Float
+  method     String   @default("cash")
+  status     String   @default("pending")
+  paidAt     DateTime?
+  createdAt  DateTime @default(now())
+  ride       Ride     @relation(fields: [rideId], references: [id])
+}
