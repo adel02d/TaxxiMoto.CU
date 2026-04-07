@@ -1,10 +1,10 @@
 import { webhookCallback } from "grammy";
-import bot from "@/lib/bot";
-
-const handleUpdate = webhookCallback(bot, "std/http");
+import { getBot } from "@/lib/bot";
 
 export async function POST(request: Request) {
   try {
+    const bot = getBot();
+    const handleUpdate = webhookCallback(bot, "std/http");
     return await handleUpdate(request);
   } catch (error) {
     console.error("Webhook error:", error);
