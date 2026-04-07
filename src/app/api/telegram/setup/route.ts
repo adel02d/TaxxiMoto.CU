@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import bot from "@/lib/bot";
+import { getBot } from "@/lib/bot";
 
 export async function GET(request: Request) {
   try {
+    const bot = getBot();
     const url = new URL(request.url);
     const webhookUrl = `${url.origin}/api/telegram/webhook`;
 
