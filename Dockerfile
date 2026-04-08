@@ -22,7 +22,11 @@ WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl
 
 ENV NODE_ENV=production
+ENV PORT=10000
+
 COPY --from=builder /app/.next/standalone/ ./
 COPY --from=builder /app/.next/static/ ./.next/static/
+
 EXPOSE 10000
-CMD ["node", "server.js"]
+
+CMD ["sh", "-c", "while true; do node server.js; echo \"Server crashed, restarting in 3s...\"; sleep 3; done"]
