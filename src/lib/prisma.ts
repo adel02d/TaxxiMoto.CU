@@ -7,15 +7,14 @@ const globalForPrisma = globalThis as unknown as {
 const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === "production" ? ["error"] : ["warn", "error"],
+    log: ["error"],
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-// Test connection on startup (only logs, doesn't crash)
 prisma
   .$connect()
-  .then(() => console.log("✅ Prisma connected to database"))
-  .catch((err) => console.error("⚠️ Prisma connection error:", err.message));
+  .then(() => console.log("Prisma connected"))
+  .catch((err) => console.error("Prisma error:", err.message));
 
 export default prisma;
