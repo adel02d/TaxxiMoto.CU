@@ -82,13 +82,14 @@ export async function GET(request: Request) {
       );
     `);
 
-    results.push("Tablas creadas correctamente");
+    results.push("Tablas listas");
 
     const token = process.env.BOT_TOKEN;
     if (token) {
       results.push("Registrando webhook...");
       const url = new URL(request.url);
-      webhookUrl = `${url.origin}/api/telegram/webhook`;
+      const cleanOrigin = `${url.protocol}//${url.hostname}`;
+      webhookUrl = `${cleanOrigin}/api/telegram/webhook`;
 
       const telegramRes = await fetch(
         `https://api.telegram.org/bot${token}/setWebhook`,
