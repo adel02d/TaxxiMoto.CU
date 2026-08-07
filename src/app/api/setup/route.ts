@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "../../../lib/prisma";
 
 export async function GET(request: Request) {
   const results: string[] = [];
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "User" (
         "id" SERIAL PRIMARY KEY,
-        "telegramId" INTEGER NOT NULL UNIQUE,
+        "telegramId" BIGINT NOT NULL UNIQUE,
         "firstName" TEXT NOT NULL,
         "lastName" TEXT, "username" TEXT, "phone" TEXT,
         "role" TEXT NOT NULL DEFAULT 'client',
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "Driver" (
         "id" SERIAL PRIMARY KEY,
-        "telegramId" INTEGER NOT NULL UNIQUE,
+        "telegramId" BIGINT NOT NULL UNIQUE,
         "firstName" TEXT NOT NULL,
         "lastName" TEXT, "username" TEXT, "phone" TEXT,
         "motorcyclePlate" TEXT, "motorcycleModel" TEXT,
@@ -40,9 +40,9 @@ export async function GET(request: Request) {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "Ride" (
         "id" SERIAL PRIMARY KEY,
-        "clientId" INTEGER NOT NULL,
+        "clientId" BIGINT NOT NULL,
         "clientName" TEXT NOT NULL,
-        "clientPhone" TEXT, "driverId" INTEGER, "driverName" TEXT,
+        "clientPhone" TEXT, "driverId" BIGINT, "driverName" TEXT,
         "pickupAddress" TEXT NOT NULL, "dropoffAddress" TEXT,
         "pickupLat" DOUBLE PRECISION, "pickupLng" DOUBLE PRECISION,
         "dropoffLat" DOUBLE PRECISION, "dropoffLng" DOUBLE PRECISION,
@@ -82,6 +82,13 @@ export async function GET(request: Request) {
       );
     `);
 
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Setting" (
+        "key" TEXT NOT NULL PRIMARY KEY,
+        "value" TEXT NOT NULL
+      );
+    `);
+
     results.push("Tablas listas");
 
     const token = process.env.BOT_TOKEN;
@@ -89,7 +96,7 @@ export async function GET(request: Request) {
       results.push("Registrando webhook...");
       const baseUrl = process.env.RENDER_EXTERNAL_URL
         ? process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "")
-        : "https://taximotos-cu.onrender.com";
+        : "https://taxximoto-cu.onrender.com";
       webhookUrl = `${baseUrl}/api/telegram/webhook`;
 
       const telegramRes = await fetch(

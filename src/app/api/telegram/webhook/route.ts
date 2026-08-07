@@ -1,5 +1,5 @@
 import { webhookCallback } from "grammy";
-import { getBot } from "@/lib/bot";
+import { getBot } from "../../../../lib/bot";
 
 export async function POST(request: Request) {
   try {

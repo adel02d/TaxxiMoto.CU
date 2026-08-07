@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: TaxxiMoto-CU
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma db push && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromConfigVar: DATABASE_URL
+      - key: BOT_TOKEN
+        fromConfigVar: BOT_TOKEN
+      - key: ADMIN_IDS
+        fromConfigVar: ADMIN_IDS

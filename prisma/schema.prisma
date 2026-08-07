@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id             Int      @id @default(autoincrement())
-  telegramId     Int      @unique
+  telegramId     BigInt   @unique
   firstName      String
   lastName       String?
   username       String?
@@ -22,7 +22,7 @@ model User {
 
 model Driver {
   id              Int      @id @default(autoincrement())
-  telegramId      Int      @unique
+  telegramId      BigInt   @unique
   firstName       String
   lastName        String?
   username        String?
@@ -33,6 +33,8 @@ model Driver {
   rating          Float    @default(5.0)
   totalRides      Int      @default(0)
   totalEarnings   Float    @default(0)
+  freeRidesLeft   Int      @default(5)
+  debt            Float    @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -41,10 +43,10 @@ model Driver {
 
 model Ride {
   id             Int       @id @default(autoincrement())
-  clientId       Int
+  clientId       BigInt
   clientName     String
   clientPhone    String?
-  driverId       Int?
+  driverId       BigInt?
   driverName     String?
   pickupAddress  String
   dropoffAddress String?
@@ -72,4 +74,9 @@ model Payment {
   paidAt     DateTime?
   createdAt  DateTime @default(now())
   ride       Ride     @relation(fields: [rideId], references: [id])
+}
+
+model Setting {
+  key   String @id
+  value String
 }

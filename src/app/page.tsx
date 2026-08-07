@@ -1,197 +1,247 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import dynamic from 'next/dynamic';
 
-interface Stats {
-  totalRides: number; todayRides: number; completedRides: number;
-  pendingRides: number; totalEarnings: number; todayEarnings: number;
-  activeDrivers: number; cancelledRides: number;
-}
-interface Driver {
-  id: number; telegramId: number; firstName: string; lastName: string | null;
-  phone: string | null; motorcyclePlate: string | null; status: string;
-  rating: number; totalRides: number; totalEarnings: number;
-}
-interface Ride {
-  id: number; clientName: string; clientPhone: string | null;
-  driverName: string | null; pickupAddress: string; dropoffAddress: string | null;
-  fare: number | null; status: string; createdAt: string; completedAt: string | null;
-}
-interface Payment {
-  id: number; rideId: number; amount: number; method: string;
-  status: string; paidAt: string | null;
-}
+const MapContent = dynamic(() => import('./MapComponent'), { 
+  ssr: false,
+  loading: () => <div className="h-full w-full flex items-center justify-center bg-gray-50 text-gray-400 italic">Cargando mapa interactivo...</div>
+});
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [rides, setRides] = useState<Ride[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [loading, setLoading] = useState(true);
+export default function MiniApp() {
+  const [tg, setTg] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  const [pickup, setPickup] = useState<[number, number] | null>(null);
+  const [dropoff, setDropoff] = useState<[number, number] | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [dropoffAddress, setDropoffAddress] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [distance, setDistance] = useState(0);
+  const [price, setPrice] = useState(0);
+  const [calculating, setCalculating] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(1); // 1: Mapa, 2: Datos del Cliente
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/stats").then((r) => r.json()),
-      fetch("/api/drivers").then((r) => r.json()),
-      fetch("/api/rides").then((r) => r.json()),
-      fetch("/api/payments").then((r) => r.json()),
-    ]).then(([s, d, r, p]) => {
-      setStats(s); setDrivers(d); setRides(r); setPayments(p); setLoading(false);
-    }).catch(() => setLoading(false));
+    if (typeof window !== "undefined") {
+      const telegram = (window as any).Telegram?.WebApp;
+      if (telegram) {
+        telegram.ready();
+        telegram.expand();
+        setTg(telegram);
+        const tgUser = telegram.initDataUnsafe?.user;
+        setUser(tgUser);
+        if (tgUser) {
+          setClientName(tgUser.first_name + (tgUser.last_name ? " " + tgUser.last_name : ""));
+        }
+      }
+
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setPickup(coords);
+        setPickupAddress("📍 Ubicación actual");
+      }, () => console.log("GPS no disponible"));
+    }
   }, []);
 
-  const sc: Record<string, string> = {
-    pending: "bg-yellow-500/20 text-yellow-400", assigned: "bg-blue-500/20 text-blue-400",
-    in_progress: "bg-purple-500/20 text-purple-400", completed: "bg-green-500/20 text-green-400",
-    cancelled: "bg-red-500/20 text-red-400",
-  };
-  const se: Record<string, string> = {
-    pending: "⏳", assigned: "🛵", in_progress: "🏁", completed: "✅", cancelled: "❌",
-    available: "🟢", busy: "🔴", offline: "⚫",
+  const calculateRoute = useCallback(async (p: [number, number], d: [number, number]) => {
+    setCalculating(true);
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${p[1]},${p[0]};${d[1]},${d[0]}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes[0]) {
+        const dist = data.routes[0].distance / 1000;
+        setDistance(dist);
+        setPrice(Math.max(500, Math.round(dist * 300)));
+        const coords = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+        setRouteCoords(coords);
+      }
+    } catch (e) {
+      console.error("Error ruta:", e);
+    } finally {
+      setCalculating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pickup && dropoff) {
+      calculateRoute(pickup, dropoff);
+    } else {
+      setRouteCoords([]);
+    }
+  }, [pickup, dropoff, calculateRoute]);
+
+  const handleMapClick = (latlng: any) => {
+    if (success) return;
+    if (!pickup) {
+      setPickup([latlng.lat, latlng.lng]);
+      setPickupAddress(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
+    } else if (!dropoff) {
+      setDropoff([latlng.lat, latlng.lng]);
+      setDropoffAddress(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
+    } else {
+      setPickup([latlng.lat, latlng.lng]);
+      setDropoff(null);
+      setRouteCoords([]);
+      setDropoffAddress("");
+      setPickupAddress(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
+    }
   };
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="text-2xl animate-pulse">🛵 Cargando...</div></div>;
+  const handleConfirm = async () => {
+    if (!clientName || !clientPhone) {
+      alert("Por favor completa tu nombre y teléfono");
+      return;
+    }
+    setLoading(true);
+
+    const requestData = {
+      userId: user?.id || 743356675,
+      clientName: clientName,
+      clientPhone: clientPhone,
+      pickup: pickupAddress,
+      dropoff: dropoffAddress,
+      pickupCoords: pickup,
+      dropoffCoords: dropoff,
+      fare: price,
+      distance: distance
+    };
+
+    try {
+      const res = await fetch("/api/rides/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestData)
+      });
+      const resData = await res.json();
+      if (resData.ok) {
+        setSuccess(true);
+        if (tg) {
+          setTimeout(() => tg.close(), 2500);
+        }
+      } else {
+        alert("Error: " + (resData.error || "Desconocido"));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error de conexión");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-white text-center p-6 animate-in fade-in duration-500">
+        <div className="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-sm">✓</div>
+        <h1 className="text-2xl font-black text-gray-900 tracking-tight">¡VIAJE SOLICITADO!</h1>
+        <p className="text-gray-500 mt-2 text-sm">Estamos buscando al conductor<br/>más cercano para ti.</p>
+      </div>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex flex-col font-sans">
+        <header className="flex items-center gap-2 mb-8">
+          <button onClick={() => setStep(1)} className="text-2xl">←</button>
+          <h1 className="text-xl font-bold">Datos de contacto</h1>
+        </header>
+
+        <div className="bg-white rounded-3xl p-6 shadow-xl space-y-6 flex-1">
+          <div>
+            <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Tu Nombre</label>
+            <input 
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="Ej: Juan Pérez"
+              className="w-full bg-gray-100 border-none rounded-2xl py-4 px-4 mt-2 text-sm font-bold"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Teléfono de contacto</label>
+            <input 
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              placeholder="Ej: 5351234567"
+              className="w-full bg-gray-100 border-none rounded-2xl py-4 px-4 mt-2 text-sm font-bold"
+            />
+          </div>
+
+          <div className="pt-6 border-t border-gray-100">
+            <div className="flex justify-between mb-2">
+              <span className="text-gray-400 text-sm">Distancia:</span>
+              <span className="font-bold">{distance.toFixed(2)} km</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400 text-sm">Precio Total:</span>
+              <span className="text-2xl font-black text-yellow-600">{price} CUP</span>
+            </div>
+          </div>
+        </div>
+
+        <button 
+          onClick={handleConfirm}
+          disabled={!clientName || !clientPhone || loading}
+          className={`w-full mt-6 py-5 rounded-3xl font-black text-white shadow-2xl transition-all active:scale-95 ${(!clientName || !clientPhone || loading) ? 'bg-gray-200' : 'bg-yellow-500'}`}
+        >
+          {loading ? "Confirmando..." : "Confirmar Viaje"}
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center gap-3">
-          <span className="text-3xl">🛵</span>
-          <div><h1 className="text-xl font-bold">TaxiMotos.CU</h1><p className="text-gray-400 text-sm">Panel de Administración</p></div>
-        </div>
-      </header>
-      <div className="bg-gray-900 border-b border-gray-800 px-6">
-        <div className="max-w-7xl mx-auto flex gap-1">
-          {[
-            { key: "overview", label: "📊 Inicio" },
-            { key: "drivers", label: "🏍️ Conductores" },
-            { key: "rides", label: "🚗 Viajes" },
-            { key: "payments", label: "💰 Pagos" },
-          ].map((tab) => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={"px-4 py-3 text-sm font-medium transition-colors " + (activeTab === tab.key ? "text-yellow-400 border-b-2 border-yellow-400" : "text-gray-400 hover:text-white")}>
-              {tab.label}
-            </button>
-          ))}
+    <div className="flex flex-col h-screen bg-white text-black font-sans overflow-hidden">
+      <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
+        <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-gray-100 flex items-center justify-between pointer-events-auto">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🛵</span>
+            <div>
+              <h1 className="text-sm font-black uppercase tracking-tight">TaxiMotos.CU</h1>
+              <p className="text-[10px] text-gray-500 font-bold uppercase">
+                {!pickup ? "Marca el Origen" : !dropoff ? "Marca el Destino" : "Ruta Lista"}
+              </p>
+            </div>
+          </div>
+          {calculating && <div className="animate-spin h-4 w-4 border-2 border-yellow-500 border-t-transparent rounded-full"></div>}
         </div>
       </div>
-      <main className="max-w-7xl mx-auto p-6">
-        {activeTab === "overview" && stats && (
-          <div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                <p className="text-gray-400 text-sm">Viajes Totales</p>
-                <p className="text-3xl font-bold mt-1">{stats.totalRides}</p>
-                <p className="text-green-400 text-sm mt-1">+{stats.todayRides} hoy</p>
-              </div>
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                <p className="text-gray-400 text-sm">Ingresos Totales</p>
-                <p className="text-3xl font-bold mt-1">{stats.totalEarnings} CUP</p>
-                <p className="text-green-400 text-sm mt-1">+{stats.todayEarnings} CUP hoy</p>
-              </div>
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                <p className="text-gray-400 text-sm">Conductores</p>
-                <p className="text-3xl font-bold mt-1">{stats.activeDrivers}</p>
-                <p className="text-gray-400 text-sm mt-1">{drivers.filter((d) => d.status === "available").length} disponibles</p>
-              </div>
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                <p className="text-gray-400 text-sm">Pendientes</p>
-                <p className="text-3xl font-bold mt-1">{stats.pendingRides}</p>
-                <p className="text-gray-400 text-sm mt-1">{stats.completedRides} completados</p>
-              </div>
-            </div>
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-              <h2 className="text-lg font-bold mb-4">🚗 Últimos Viajes</h2>
-              <div className="space-y-3">
-                {rides.slice(0, 10).map((ride) => (
-                  <div key={ride.id} className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">#{ride.id}</span>
-                        <span className={"text-xs px-2 py-0.5 rounded-full " + (sc[ride.status] || "")}>{se[ride.status]} {ride.status}</span>
-                      </div>
-                      <p className="text-gray-400 text-sm mt-1">👤 {ride.clientName} → 🛵 {ride.driverName || "Sin asignar"}</p>
-                      <p className="text-gray-500 text-xs">{ride.pickupAddress} → {ride.dropoffAddress || "—"}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold">{ride.fare ? ride.fare + " CUP" : "—"}</p>
-                    </div>
-                  </div>
-                ))}
-                {rides.length === 0 && <p className="text-gray-500 text-center py-4">No hay viajes aún</p>}
-              </div>
-            </div>
+
+      <div className="flex-1 z-10">
+        <MapContent 
+          pickup={pickup} 
+          dropoff={dropoff} 
+          routeCoords={routeCoords}
+          onMapClick={handleMapClick} 
+        />
+      </div>
+
+      <div className="p-6 bg-white rounded-t-[40px] shadow-[0_-20px_40px_rgba(0,0,0,0.1)] z-[1000] border-t border-gray-50">
+        <div className="space-y-4">
+          <div className="relative">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-green-500"></div>
+            <input readOnly placeholder="Toca el mapa para origen..." value={pickupAddress} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-10 pr-4 text-sm font-medium" />
           </div>
-        )}
-        {activeTab === "drivers" && (
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-            <h2 className="text-lg font-bold mb-4">🏍️ Conductores ({drivers.length})</h2>
-            <div className="space-y-3">
-              {drivers.map((d) => (
-                <div key={d.id} className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center text-2xl">{se[d.status] || "⚫"}</div>
-                    <div>
-                      <p className="font-bold">{d.firstName} {d.lastName || ""}</p>
-                      <p className="text-gray-400 text-sm">📱 {d.phone || "—"} | 🏍️ {d.motorcyclePlate || "—"}</p>
-                      <p className="text-gray-500 text-sm">ID: {d.telegramId} | ⭐ {d.rating.toFixed(1)}</p>
-                    </div>
-                  </div>
-                  <div className="text-right"><p className="font-bold">{d.totalRides} viajes</p><p className="text-green-400">{d.totalEarnings} CUP</p></div>
-                </div>
-              ))}
-            </div>
+          <div className="relative">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-red-500"></div>
+            <input readOnly placeholder="Toca el mapa para destino..." value={dropoffAddress} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-10 pr-4 text-sm font-medium" />
           </div>
-        )}
-        {activeTab === "rides" && (
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-            <h2 className="text-lg font-bold mb-4">🚗 Historial ({rides.length})</h2>
-            <div className="space-y-3">
-              {rides.map((ride) => (
-                <div key={ride.id} className="p-4 bg-gray-800/50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-bold text-lg">#{ride.id}</span>
-                    <span className={"text-xs px-2 py-0.5 rounded-full " + (sc[ride.status] || "")}>{se[ride.status]} {ride.status}</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                    <div>👤 {ride.clientName} ({ride.clientPhone || "—"})</div>
-                    <div>🛵 {ride.driverName || "Sin asignar"}</div>
-                    <div>🏠 {ride.pickupAddress}</div>
-                    <div>🎯 {ride.dropoffAddress || "No especificado"}</div>
-                  </div>
-                  {ride.fare && <p className="mt-2 font-bold text-green-400">💰 {ride.fare} CUP</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {activeTab === "payments" && (
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-            <h2 className="text-lg font-bold mb-4">💰 Pagos ({payments.length})</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="text-gray-400 border-b border-gray-700">
-                  <th className="text-left py-3 px-2">Ticket</th><th className="text-left py-3 px-2">Monto</th>
-                  <th className="text-left py-3 px-2">Método</th><th className="text-left py-3 px-2">Estado</th>
-                  <th className="text-left py-3 px-2">Fecha</th>
-                </tr></thead>
-                <tbody>
-                  {payments.map((p) => (
-                    <tr key={p.id} className="border-b border-gray-800">
-                      <td className="py-3 px-2 font-bold">#{p.rideId}</td>
-                      <td className="py-3 px-2">{p.amount} CUP</td>
-                      <td className="py-3 px-2">{p.method === "cash" ? "💵 Efectivo" : "🏦 Transfer"}</td>
-                      <td className="py-3 px-2"><span className={"text-xs px-2 py-0.5 rounded-full " + (p.status === "completed" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400")}>{p.status}</span></td>
-                      <td className="py-3 px-2 text-gray-400">{p.paidAt ? new Date(p.paidAt).toLocaleString("es-CU") : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </main>
+        </div>
+
+        <button 
+          onClick={() => setStep(2)}
+          disabled={!pickup || !dropoff || calculating}
+          className={`w-full mt-6 py-5 rounded-[24px] font-black text-white shadow-2xl transition-all active:scale-95 uppercase tracking-widest ${(!pickup || !dropoff || calculating) ? 'bg-gray-200 text-gray-400' : 'bg-yellow-500 hover:bg-yellow-400'}`}
+        >
+          Continuar
+        </button>
+      </div>
     </div>
   );
 }
